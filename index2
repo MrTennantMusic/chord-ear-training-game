@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Chord Ear Training Game — Improved</title>
+<style>
+  body { font-family: Arial, sans-serif; text-align: center; padding: 30px; }
+  button { font-size: 18px; margin: 10px; padding: 10px 20px; }
+  #feedback { font-size: 24px; margin-top: 20px; height: 40px; }
+  #score { font-size: 20px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>Chord Ear Training Game</h1>
+  <p>Listen to the chord and guess the chord type:</p>
+  <button id="playBtn">Play Chord</button>
+  <div>
+    <button onclick="guessChord('added6th')">Added 6th</button>
+    <button onclick="guessChord('dom7th')">Dominant 7th</button>
+    <button onclick="guessChord('dim7th')">Diminished 7th</button>
+  </div>
+  <div id="feedback"></div>
+  <div id="score">Score: 0</div>
+
+<script>
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  const chordTypes = {
+    added6th: [0, 4, 7, 9],
+    dom7th: [0, 4, 7, 10],
+    dim7th: [0, 3, 6, 9]
+  };
+
+  const roots = {
+    C: 261.63,
+    D: 293.66,
+    E: 329.63,
+    F: 349.23,
+    G: 392.00,
+    A: 440.00,
+    B: 493.88
+  };
+
+  const waveTypes = ['sine', 'square', 'triangle', 'sawtooth'];
+
+  let score = 0;
+  let chordToGuess = null;
+
+  function freqFromRoot(rootFreq, semitones) {
+    return rootFreq * Math.pow(2, semitones / 12);
+  }
+
+  function playTone(freq, duration, waveform, startTime) {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    osc.type = waveform;
+    osc.frequency.value = freq;
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    gainNode.gain.setValueAtTime(0, startTime);
+    gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  }
+
+  function playChord(rootFreq, intervals, waveform, when) {
+    const noteDuration = 0.6;
+    const chordDuration = 1.2;
+    const notes = intervals.map(i => freqFromRoot(rootFreq, i));
+
+    // Broken chord notes
+    notes.forEach((f, i) => {
+      playTone(f, noteDuration, waveform, when + i * noteDuration);
+    });
+
+    // Block chord together
+    const blockStart = when + notes.length * noteDuration;
+
+    const gainNode = audioCtx.createGain();
+    gainNode.connect(audioCtx.destination);
+    gainNode.gain.setValueAtTime(0, blockStart);
+    gainNode.gain.linearRampToValueAtTime(0.4, blockStart + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, blockStart + chordDuration);
+
+    notes.forEach(freq => {
+      const osc = audioCtx.createOscillator();
+      osc.type = waveform;
+      osc.frequency.value = freq;
+      osc.connect(gainNode);
+      osc.start(blockStart);
+      osc.stop(blockStart + chordDuration);
+    });
+  }
+
+  function getRandomChord() {
+    const chordKeys = Object.keys(chordTypes);
+    const chordType = chordKeys[Math.floor(Math.random() * chordKeys.length)];
+    const rootNames = Object.keys(roots);
+    const rootName = rootNames[Math.floor(Math.random() * rootNames.length)];
+    const waveform = waveTypes[Math.floor(Math.random() * waveTypes.length)];
+    return {
+      chordType,
+      rootName,
+      rootFreq: roots[rootName],
+      intervals: chordTypes[chordType],
+      waveform
+    };
+  }
+
+  const feedbackEl = document.getElementById('feedback');
+  const scoreEl = document.getElementById('score');
+  const playBtn = document.getElementById('playBtn');
+
+  function newChord() {
+    chordToGuess = getRandomChord();
+    feedbackEl.textContent = '';
+  }
+
+  playBtn.onclick = function() {
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    playChord(
+      chordToGuess.rootFreq,
+      chordToGuess.intervals,
+      chordToGuess.waveform,
+      audioCtx.currentTime + 0.1
+    );
+  };
+
+  function guessChord(type) {
+    if (!chordToGuess) return;
+    if (type === chordToGuess.chordType) {
+      feedbackEl.textContent = '✅ Correct!';
+      feedbackEl.style.color = 'green';
+      score++;
+    } else {
+      feedbackEl.textContent = `❌ Wrong. It was ${formatChordName(chordToGuess.chordType)}.`;
+      feedbackEl.style.color = 'red';
+    }
+    scoreEl.textContent = `Score: ${score}`;
+    setTimeout(() => {
+      newChord();
+    }, 2000);
+  }
+
+  function formatChordName(name) {
+    if (name === 'added6th') return 'Added 6th';
+    if (name === 'dom7th') return 'Dominant 7th';
+    if (name === 'dim7th') return 'Diminished 7th';
+    return name;
+  }
+
+  newChord();
+</script>
+</body>
+</html>
